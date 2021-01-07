@@ -11,6 +11,7 @@ from viscosity_models import viscosity
 from colloid_combo_fun import *
 import base64
 import os
+
 """
 # Colloid Model for MIT-Lubrizol Electric Vehicle Battery Cooling Application"""
 
@@ -234,7 +235,6 @@ def compare_ToutfixedQfixed(data, T_out_fixed, T_max, Q_out_fixed, S_t,
 
         Reynolds = np.divide(data['rho_nf'], data['mu_nf']) * data['Velocity'] * D_h
 
-
         data['HTC'] = .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(np.multiply(Prandtl ** .4, Reynolds ** .8),
                                                                            data['k_nf']) / D_h
     elif option_flow_type == "Auto":
@@ -245,7 +245,7 @@ def compare_ToutfixedQfixed(data, T_out_fixed, T_max, Q_out_fixed, S_t,
             data['k_nf']) / D_h) ** -1) ** (5 / 3)
         Reynolds_lam = np.multiply(np.divide(data['rho_nf'], data['mu_nf']), v_lam) * D_h
         htc_lam = .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(np.multiply(Prandtl ** .4, Reynolds_lam ** .6),
-                                                                           data['k_nf']) / D_h
+                                                                       data['k_nf']) / D_h
         v_turb = (Q_out_fixed / (A_s * (T_max - T_out_fixed)) * (
                 .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(
             np.multiply((np.divide(np.multiply(data['c_nf'], data['mu_nf']), data['k_nf'])) ** .4,
@@ -255,8 +255,8 @@ def compare_ToutfixedQfixed(data, T_out_fixed, T_max, Q_out_fixed, S_t,
         Reynolds_turb = np.multiply(np.divide(data['rho_nf'], data['mu_nf']), v_turb) * D_h
 
         htc_turb = .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(np.multiply(Prandtl ** .4, Reynolds_turb ** .8),
-                                                                           data['k_nf']) / D_h
-        turbulent_idx = Reynolds_lam>2000
+                                                                        data['k_nf']) / D_h
+        turbulent_idx = Reynolds_lam > 2000
         data['Velocity'] = v_lam.copy()
         data['Velocity'][turbulent_idx] = v_turb[turbulent_idx]
         data['HTC'] = htc_lam.copy()
@@ -283,20 +283,21 @@ def compare_ToutfixedQfixed(data, T_out_fixed, T_max, Q_out_fixed, S_t,
 
     data['FOM Standard'] = np.divide(data['Q_out'], data['W_out'])
     data['FOM User'] = np.divide(
-        np.multiply(data['c_nf'] ** (user_c_coeff), np.multiply(data['rho_nf'] ** (user_rho_coeff), data['k_nf'] ** (user_k_coeff))),
+        np.multiply(data['c_nf'] ** (user_c_coeff),
+                    np.multiply(data['rho_nf'] ** (user_rho_coeff), data['k_nf'] ** (user_k_coeff))),
         data['mu_nf'] ** (user_mu_coeff))
 
-
     data['FOM Mouromtseff'] = data['rho_nf'] ** .8 * data['c_nf'] ** .33 * data['k_nf'] ** .67 / data['mu_nf'] ** .47
-    data['FOM k/mu enhancement'] = np.divide( np.divide(data['k_nf'], data['k_f']),np.divide(data['mu_nf'], data['mu_f']))
+    data['FOM k/mu enhancement'] = np.divide(np.divide(data['k_nf'], data['k_f']),
+                                             np.divide(data['mu_nf'], data['mu_f']))
     data['T_outcheck'] = T_max - data['Q_out'] / (A_s * data['HTC'])
     data['Shear Rate'] = 8 * np.divide(data['Velocity'], D_h)
 
     # look at phi = .10
-    FOMS = ['FOM Standard','FOM Mouromtseff','FOM k/mu enhancement','FOM User']
+    FOMS = ['FOM Standard', 'FOM Mouromtseff', 'FOM k/mu enhancement', 'FOM User']
     if option_FOM_norm:
         for iFOM in FOMS:
-            data[iFOM]= data[iFOM] / data[data["phi"] == 0][iFOM][0]
+            data[iFOM] = data[iFOM] / data[data["phi"] == 0][iFOM][0]
 
     data['FOM Standard normed'] = data['FOM Standard'] / data[data["phi"] == 0]['FOM Standard'][0]
     # for each particle, grab highest performing
@@ -310,8 +311,10 @@ def compare_ToutfixedQfixed(data, T_out_fixed, T_max, Q_out_fixed, S_t,
 
 @st.cache
 def grab_data(file_path):
-    nanoparticle_cand = pd.read_excel(file_path, sheet_name="nanoparticle", index_col=0, header=[0, 1], comment='#')
-    basefluid_cand = pd.read_excel(file_path, sheet_name="basefluid", index_col=0, header=[0, 1], comment='#')
+    nanoparticle_cand = pd.read_excel(file_path, sheet_name="nanoparticle", index_col=0, header=[0, 1], comment='#',
+                                      engine='openpyxl')
+    basefluid_cand = pd.read_excel(file_path, sheet_name="basefluid", index_col=0, header=[0, 1], comment='#',
+                                   engine='openpyxl')
     nanoparticle_cand['id'] = nanoparticle_cand.index
     basefluid_cand['id'] = basefluid_cand.index
     nanoparticle_cand['np_id_s'] = nanoparticle_cand['id'].copy()
@@ -370,10 +373,11 @@ def generate_colloids(nanoparticle_cand, basefluid_cand, par_space):
                                  combos_data["rho_p"], combos_data["rho_f"])
     return combos_data
 
+
 st.sidebar.title('Colloid Space Exploration')
 password = st.sidebar.text_input("Password:", value="")
 
-if password=='notarealpwd':
+if 1 == 1:  # password=='notarealpwd':
     # Create a text element and let the reader know the data is loading.
     data_load_state = st.text('Loading data...')
     # Load 10,000 rows of data into the dataframe.
@@ -411,7 +415,7 @@ def review():
         color='id:N',
         detail='index:N',
         opacity=alt.value(.5)
-    ).properties(height=400,width=500).interactive()
+    ).properties(height=400, width=500).interactive()
 
     st.write(parallelchart_np)
 
@@ -437,29 +441,25 @@ def review():
         color='id:N',
         detail='index:N',
         opacity=alt.value(1)
-    ).properties(height=200,width=500).interactive()
+    ).properties(height=200, width=500).interactive()
     st.write(parallelchart_bf)
     return
 
 
 # aLMODEL/data/data_1.xlsx
 
-if password=='notarealpwd':
+if password == 'notarealpwd':
     review()
 
 # ____________________________________________________
 # import pairings or generate them
 
 
-
-
-
-
 if 1 == 0:
     st.sidebar.subheader('Configuration')
     config_options = ['None - define yourself', 'Preset 1', 'Preset 2']
     config_picked = st.sidebar.selectbox('Config will pick viscosity and FOM models', config_options)
-if password=='notarealpwd':
+if password == 'notarealpwd':
 
     st.sidebar.subheader('Define Colloid Space')
     st.sidebar.text("Indicate the range for each parameter. A colloid space will be generated that covers that range.")
@@ -477,7 +477,7 @@ if password=='notarealpwd':
     bfs = []
     default_bf = [True, True, True, True, False, False]
     for i, ii in enumerate(basefluid_cand['id'].unique()):
-        bfs.append(st.sidebar.checkbox(ii, default_bf[i], key='bf' + ii))
+        bfs.append(st.sidebar.checkbox(str(ii), default_bf[i], key='bf' + str(ii)))
 
     st.sidebar.text("Select nanoparticles to include")
     nps = []
@@ -525,7 +525,7 @@ if password=='notarealpwd':
     option_visc = st.sidebar.selectbox('Viscosity Model', object_methods_visc, 1)
 
     var_assign = [f for f in inspect.getfullargspec(getattr(viscosity, option_visc))[0] if
-                  not f == 'self' and not f == 'phi' and not f == 'p' and not f=='d_p']
+                  not f == 'self' and not f == 'phi' and not f == 'p' and not f == 'd_p']
     visc_vars = {}
 
     st.header('Thermophysical Property Models')
@@ -539,8 +539,8 @@ if password=='notarealpwd':
     in 
     various ways depending on the users particular optimization goals. We have collected a few FOMs including a standard 
     one for minimizing pumping power in laminar or turbulent flows. 
-    
-    
+
+
     """
     st.subheader('Intrinsic viscosities and maximum volume fraction from (1)')
     sample_data = grab_data2('data/kandlikar.csv')
@@ -580,7 +580,6 @@ if password=='notarealpwd':
 
     st.latex(r' \propto  \left[ \frac{c^{\frac{4}{3}} \rho^2 k^2}{\mu^{\frac{5}{3}}} \right]')
 
-
     "The literature includes several figures of merit like Mouromtseff's number or the ratio of conductivity to viscosity " \
     "" \
     "enhancement."
@@ -588,8 +587,6 @@ if password=='notarealpwd':
     st.latex(r'''\frac{C_{k} }{C_{\mu}}>4''')
 
     "You can create a user specified figure of merit by changing the exponents on the thermophysical parameters in the sidebar."
-
-
 
     st.sidebar.text(inspect.getsource(getattr(a, option_visc)))
 
@@ -600,7 +597,6 @@ if password=='notarealpwd':
     option_FOM = st.sidebar.selectbox('Pick a FOM to compare colloids by.', object_methods_FOM, 0)
     option_FOM_norm = st.sidebar.checkbox('Normalize to first basefluid', True)
 
-
     if option_FOM == 'FOM User':
         st.sidebar.text('Select FOM exponents for user specified FOM.')
         user_c_coeff = st.sidebar.number_input('Specific Heat Power', value=4 / 3)
@@ -608,20 +604,19 @@ if password=='notarealpwd':
         user_k_coeff = st.sidebar.number_input('Conductivity Power', value=2.)
         user_mu_coeff = st.sidebar.number_input('Viscosity Power', value=5 / 3)
 
-
         string_toshowFOMuser = r"FOM_{user} \propto \left[ \frac{c^{" + str(round(user_c_coeff, 2)) + r"} \rho^{" + str(
             round(user_rho_coeff, 2)) + r"} k^{" + str(round(
             user_k_coeff, 2)) + r"}}{\mu^{" + str(round(user_mu_coeff, 2)) + r"}} \right]"
     else:
         string_toshowFOMuser = 'NA'
-        user_c_coeff = 4./3.
+        user_c_coeff = 4. / 3.
         user_rho_coeff = 2.
         user_k_coeff = 2.
-        user_mu_coeff = 5./3
-    FOM_strings = {'FOM Standard':r'FOM \propto  \left[ \frac{c^{\frac{4}{3}} \rho^2 k^2}{\mu^{\frac{5}{3}}} \right]',
-                   'FOM User':string_toshowFOMuser,
-                   'FOM Mouromtseff':r'''FOM = M_{0} = \frac{\rho^{.8} k^{.67} c^{.33}}{\mu^{.47}}''',
-                   'FOM k/mu enhancement':r'''FOM = \frac{C_{k} }{C_{\mu}}>4'''}
+        user_mu_coeff = 5. / 3
+    FOM_strings = {'FOM Standard': r'FOM \propto  \left[ \frac{c^{\frac{4}{3}} \rho^2 k^2}{\mu^{\frac{5}{3}}} \right]',
+                   'FOM User': string_toshowFOMuser,
+                   'FOM Mouromtseff': r'''FOM = M_{0} = \frac{\rho^{.8} k^{.67} c^{.33}}{\mu^{.47}}''',
+                   'FOM k/mu enhancement': r'''FOM = \frac{C_{k} }{C_{\mu}}>4'''}
 
     st.sidebar.latex(r'' + FOM_strings[option_FOM])
 
@@ -679,8 +674,6 @@ if password=='notarealpwd':
             # fig1 = basic2d(data, 'phi', option_FOM, norm=1)
             # st.write(fig1)
 
-
-
             if 1 == 1:
                 # peak perfromance
                 data_peak = data[data['p'] == np.max(unq_p)]
@@ -697,7 +690,7 @@ if password=='notarealpwd':
 
                 st.write(base_peak)
 
-            if 1==1:
+            if 1 == 1:
                 base = alt.Chart(data).mark_circle(size=60).encode(
                     x=alt.X('phi', type='ordinal'),
                     y=alt.Y(option_FOM, type='quantitative',
@@ -725,12 +718,11 @@ if password=='notarealpwd':
                     title="Select Aspect Ratio (p) and Nanoparticle")
                 st.write(radio_p)
 
-
         if newplot_toggle:
             st.subheader('Extra Plots')
             "Pick variables to plot"
             plot_variable_y = st.selectbox('Y Variable', data.columns, 35)
-            if 1==1:
+            if 1 == 1:
                 base = alt.Chart(data).mark_circle(size=60).encode(
                     x=alt.X('phi', type='ordinal'),
                     y=alt.Y(plot_variable_y, type='quantitative',
@@ -761,7 +753,6 @@ if password=='notarealpwd':
                 fig5 = basic2d(data, "phi", plot_variable_y, norm=st.checkbox('Normalize', False))
                 st.write(fig5)
 
-
         # st.markdown(
         #     "Laminar Conditions (Re<2000) for all colloids? **" + str((data['Reynolds'].values < 2000).all()) + "**")
         data.to_csv('data/data_out.csv')
@@ -775,23 +766,22 @@ if password=='notarealpwd':
             dict1 = {}
             # get input row in dictionary format
             # key = col_name
-            dict1.update({'Colloid':cc, option_FOM:np.around(loc_data[option_FOM][idxmax], 2),
-                            'Relative FOM normed':np.around(loc_data['FOM Standard normed'][idxmax], 2), 'phi':np.around(loc_data['phi'][idxmax], 3),
-                            'p':loc_data['p'][idxmax], 'a_33':loc_data['a_33'][idxmax]})
+            dict1.update({'Colloid': cc, option_FOM: np.around(loc_data[option_FOM][idxmax], 2),
+                          'Relative FOM normed': np.around(loc_data['FOM Standard normed'][idxmax], 2),
+                          'phi': np.around(loc_data['phi'][idxmax], 3),
+                          'p': loc_data['p'][idxmax], 'a_33': loc_data['a_33'][idxmax]})
 
             uq_data.append(dict1)
 
         summary = pd.DataFrame(uq_data)
 
-        summary = summary.sort_values(option_FOM,ascending=False)
+        summary = summary.sort_values(option_FOM, ascending=False)
         st.subheader('Colloid Max Performance Summary')
         summary
         st.markdown(get_table_download_link(summary, 'summary'), unsafe_allow_html=True)
 
         # TODO add calculated LOOP crap
         # st.subheader('Lubrizol Flow Loop Parameters')
-
-
 
     st.header("References")
     """
@@ -803,8 +793,6 @@ if password=='notarealpwd':
     Intrinsic Viscosities of Macromolecules and Nanoparticles. Comparison of Single-Point and Dilution Procedures. 
     Colloid Polym. Sci. 2008, 286 (11), 1223–1231. https://doi.org/10.1007/s00396-008-1902-2.
     """
-
-
 
     '-- Created at the Massachusetts Institute of Technology --'
     ' '
