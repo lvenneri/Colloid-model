@@ -179,8 +179,135 @@ def basic2d_old(data, x, y, save_loc, name='', norm=1, axess=1):
     # plt.savefig(pjoin(save_loc, name + '--' + x + '_vs_' + 'FOM' + '_22.png'))
     return fig
 
-
 def compare_ToutfixedQfixed(data, T_out_fixed, T_max, Q_out_fixed, S_t,
+                            L_t, D_t, D_h, A_c, A_s, visctype, visctype_var, save_loc, option_flow_type):
+    """
+    This computes FOM by fixing T_out (essentially limited by the air temp and then solving for everything else.
+    :param Q_fixed:
+    :param T_max:
+    :param deltaT:
+    :param T_air:
+    :param S_t:
+    :param phi_compare:
+    :return:
+    """
+
+    # data = ascii.read(pjoin(data_loc, 'data_extract.csv'), format='csv')
+    D_hp = D_h  # (4*(S_t ** 2-(D_t/4)**2*np.pi))/(4*np.pi*D_t+D_h)
+    PoD = (D_t + S_t) / D_t
+
+    data['psi_c'] = .9090 + .0783 * PoD - .1283 * np.exp(-2.4 * (PoD - 1))
+
+    phi = data['phi'].copy()
+
+    a = viscosity()
+
+    visc_vars['phi'] = phi.copy()
+    visc_vars['p'] = data['p'].copy()
+    visc_vars['d_p'] = data['a_33'].copy()
+    data['mu_nf_enhancement'] = getattr(a, option_visc)(**visc_vars)
+    data['mu_nf'] = np.multiply(data['mu_f'], data['mu_nf_enhancement'])
+
+    data['T_out'] = T_out_fixed
+    data['wt fraction'] = np.divide(np.multiply(data['phi'], data['rho_p']), data['rho_nf'])
+    Prandtl = np.divide(np.multiply(data['c_nf'], data['mu_nf']), data['k_nf'])
+
+    mu_ratio = 1
+    if option_flow_type == "Laminar":
+        data['Velocity'] = (Q_out_fixed / (A_s * (T_max - T_out_fixed)) * (
+                .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(
+            np.multiply((np.divide(np.multiply(data['c_nf'], data['mu_nf']), data['k_nf'])) ** .4,
+                        (np.divide(data['rho_nf'], data['mu_nf']) * D_h) ** .6),
+            data['k_nf']) / D_h) ** -1) ** (5 / 3)
+
+        Reynolds = np.divide(data['rho_nf'], data['mu_nf']) * data['Velocity'] * D_h
+
+        data['HTC'] = .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(np.multiply(Prandtl ** .4, Reynolds ** .6),
+                                                                           data['k_nf']) / D_h
+
+    elif option_flow_type == "Turbulent":
+        data['Velocity'] = (Q_out_fixed / (A_s * (T_max - T_out_fixed)) * (
+                .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(
+            np.multiply((np.divide(np.multiply(data['c_nf'], data['mu_nf']), data['k_nf'])) ** .4,
+                        (np.divide(data['rho_nf'], data['mu_nf']) * D_h) ** .8),
+            data['k_nf']) / D_h) ** -1) ** (5 / 4)
+
+        Reynolds = np.divide(data['rho_nf'], data['mu_nf']) * data['Velocity'] * D_h
+
+        data['HTC'] = .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(np.multiply(Prandtl ** .4, Reynolds ** .8),
+                                                                           data['k_nf']) / D_h
+    elif option_flow_type == "Auto":
+        v_lam = (Q_out_fixed / (A_s * (T_max - T_out_fixed)) * (
+                .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(
+            np.multiply((np.divide(np.multiply(data['c_nf'], data['mu_nf']), data['k_nf'])) ** .4,
+                        (np.divide(data['rho_nf'], data['mu_nf']) * D_h) ** .6),
+            data['k_nf']) / D_h) ** -1) ** (5 / 3)
+        Reynolds_lam = np.multiply(np.divide(data['rho_nf'], data['mu_nf']), v_lam) * D_h
+        htc_lam = .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(np.multiply(Prandtl ** .4, Reynolds_lam ** .6),
+                                                                       data['k_nf']) / D_h
+        v_turb = (Q_out_fixed / (A_s * (T_max - T_out_fixed)) * (
+                .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(
+            np.multiply((np.divide(np.multiply(data['c_nf'], data['mu_nf']), data['k_nf'])) ** .4,
+                        (np.divide(data['rho_nf'], data['mu_nf']) * D_h) ** .8),
+            data['k_nf']) / D_h) ** -1) ** (5 / 4)
+
+        Reynolds_turb = np.multiply(np.divide(data['rho_nf'], data['mu_nf']), v_turb) * D_h
+
+        htc_turb = .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(np.multiply(Prandtl ** .4, Reynolds_turb ** .8),
+                                                                        data['k_nf']) / D_h
+        turbulent_idx = Reynolds_lam > 2000
+        data['Velocity'] = v_lam.copy()
+        data['Velocity'][turbulent_idx] = v_turb[turbulent_idx]
+        data['HTC'] = htc_lam.copy()
+        data['HTC'][turbulent_idx] = htc_turb[turbulent_idx]
+
+        Reynolds = np.divide(data['rho_nf'], data['mu_nf']) * data['Velocity'] * D_h
+
+    data['m_flowrate'] = data['rho_nf'] * A_c * data['Velocity']
+
+    deltaT = np.divide(Q_out_fixed, (data['c_nf'] * data['rho_nf'] * A_c * data['Velocity']))
+
+    data['deltaT'] = deltaT
+
+    data['Q_out'] = data['c_nf'] * data['m_flowrate'] * (deltaT)
+
+    data['Q_out_check'] = A_s * data['HTC'] * (T_max - T_out_fixed)
+    data['W_out'] = 162 * (PoD - 1) ** .435 * (Reynolds) ** -1 * data['rho_nf'] * (L_t / (2 * D_hp)) * data[
+        'Velocity'] ** 2 * data[
+                        'm_flowrate'] * data['rho_nf'] ** -1
+    data['Reynolds'] = Reynolds
+    data['Prandtl'] = Prandtl
+
+    data['T_in'] = data['T_out'] - deltaT
+
+    data['FOM Standard'] = np.divide(data['Q_out'], data['W_out'])
+    data['FOM User'] = np.divide(
+        np.multiply(data['c_nf'] ** (user_c_coeff),
+                    np.multiply(data['rho_nf'] ** (user_rho_coeff), data['k_nf'] ** (user_k_coeff))),
+        data['mu_nf'] ** (user_mu_coeff))
+
+    data['FOM Mouromtseff'] = data['rho_nf'] ** .8 * data['c_nf'] ** .33 * data['k_nf'] ** .67 / data['mu_nf'] ** .47
+    data['FOM k/mu enhancement'] = np.divide(np.divide(data['k_nf'], data['k_f']),
+                                             np.divide(data['mu_nf'], data['mu_f']))
+    data['T_outcheck'] = T_max - data['Q_out'] / (A_s * data['HTC'])
+    data['Shear Rate'] = 8 * np.divide(data['Velocity'], D_h)
+
+    # look at phi = .10
+    FOMS = ['FOM Standard', 'FOM Mouromtseff', 'FOM k/mu enhancement', 'FOM User']
+    if option_FOM_norm:
+        for iFOM in FOMS:
+            data[iFOM] = data[iFOM] / data[data["phi"] == 0][iFOM][0]
+
+    data['FOM Standard normed'] = data['FOM Standard'] / data[data["phi"] == 0]['FOM Standard'][0]
+    # for each particle, grab highest performing
+
+    name = 'T_out_fixed=' + str(T_out_fixed) + ', Qoutfixed=' + str(Q_out_fixed) + ', T_wall=' + str(
+        T_max) + ', S_t=' + str(
+        S_t)
+
+    return data
+
+def compare_ToutfixedQfixed_ShearThinning(data, T_out_fixed, T_max, Q_out_fixed, S_t,
                             L_t, D_t, D_h, A_c, A_s, visctype, visctype_var, save_loc, option_flow_type):
     """
     This computes FOM by fixing T_out (essentially limited by the air temp and then solving for everything else.
@@ -376,8 +503,9 @@ def generate_colloids(nanoparticle_cand, basefluid_cand, par_space):
 
 st.sidebar.title('Colloid Space Exploration')
 password = st.sidebar.text_input("Password:", value="")
+password = 'notarealpwd'
 
-if 1 == 1:  # password=='notarealpwd':
+if password=='notarealpwd':
     # Create a text element and let the reader know the data is loading.
     data_load_state = st.text('Loading data...')
     # Load 10,000 rows of data into the dataframe.
@@ -655,7 +783,7 @@ if password == 'notarealpwd':
 
     if st.button('Press to Compute') or autocompute_toggle:
 
-        data = compare_ToutfixedQfixed(data=colloid_combos,
+        data = compare_ToutfixedQfixed_ShearThinning(data=colloid_combos,
                                        T_out_fixed=T_out_fixed, T_max=T_max,
                                        Q_out_fixed=Q_out_fixed,
                                        S_t=S_t, L_t=L_t, D_t=D_t, D_h=D_h, A_c=A_c, A_s=A_s, save_loc=data_loc,
