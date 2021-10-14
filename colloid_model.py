@@ -11,6 +11,7 @@ from viscosity_models import viscosity
 from colloid_combo_fun import *
 import base64
 import os
+from scipy.optimize import curve_fit, fsolve, root
 
 """
 # Colloid Model for MIT-Lubrizol Electric Vehicle Battery Cooling Application"""
@@ -179,6 +180,20 @@ def basic2d_old(data, x, y, save_loc, name='', norm=1, axess=1):
     # plt.savefig(pjoin(save_loc, name + '--' + x + '_vs_' + 'FOM' + '_22.png'))
     return fig
 
+
+def func_v_mu(x, pars):
+    """
+    2 eqs relating mu and v, using shear thinning (a,b,c,d) relation and mu = e/v
+    x = [velocity, viscosity]
+
+    """
+
+    a, b, c, d, e, f = pars
+
+    return [x[1] - ((a - d) * (np.tanh(-b * (np.log(x[0]) - c)) + 1) / 2 + d),
+            x[0] - e * x[1] ** f]
+
+
 def compare_ToutfixedQfixed(data, T_out_fixed, T_max, Q_out_fixed, S_t,
                             L_t, D_t, D_h, A_c, A_s, visctype, visctype_var, save_loc, option_flow_type):
     """
@@ -289,11 +304,26 @@ def compare_ToutfixedQfixed(data, T_out_fixed, T_max, Q_out_fixed, S_t,
     data['FOM Mouromtseff'] = data['rho_nf'] ** .8 * data['c_nf'] ** .33 * data['k_nf'] ** .67 / data['mu_nf'] ** .47
     data['FOM k/mu enhancement'] = np.divide(np.divide(data['k_nf'], data['k_f']),
                                              np.divide(data['mu_nf'], data['mu_f']))
+
+
+
+    mixedConvection_vec = np.vectorize(mixedConvection)
+    data["heatflux"] = Q_out_fixed/A_c
+    data['d_h'] = D_h
+    data['FOM Mixed Vertical Plate'] = mixedConvection_vec(c=data['c_nf'],
+                                                       k=data['k_nf'],
+                                                       mu=data['mu_nf'],
+                                                       rho=data['rho_nf'],
+                                                       deltaTwall2bulk=data['c_nf'],
+                                                       heatflux=data['heatflux'],
+                                                       d_h=data['d_h'])
+    data['FOM Mixed Vertical Plate']
+
     data['T_outcheck'] = T_max - data['Q_out'] / (A_s * data['HTC'])
     data['Shear Rate'] = 8 * np.divide(data['Velocity'], D_h)
 
     # look at phi = .10
-    FOMS = ['FOM Standard', 'FOM Mouromtseff', 'FOM k/mu enhancement', 'FOM User']
+    FOMS = ['FOM Standard', 'FOM Mouromtseff', 'FOM k/mu enhancement', 'FOM User','FOM Mixed Vertical Plate']
     if option_FOM_norm:
         for iFOM in FOMS:
             data[iFOM] = data[iFOM] / data[data["phi"] == 0][iFOM][0]
@@ -307,8 +337,19 @@ def compare_ToutfixedQfixed(data, T_out_fixed, T_max, Q_out_fixed, S_t,
 
     return data
 
+def mixedConvection(c,k,mu,rho,deltaTwall2bulk, heatflux,d_h,):
+    h = heatflux/deltaTwall2bulk
+    t1 = 0.075*((k) / (c * mu)) ** (2 / 3) + 1
+    t2 = (d_h ** (3) * h ** (3)) / (k ** (3))
+    t3n = 0.18 * 9.81 ** (3 / 4)*((c *mu) / (k)) ** (3 / 4)
+    t3d = (0.63 * (k / (c * mu)) ** (9 / 16) + 1) ** (4 / 3)
+    t4 = rho * d_h *c**(2/3)
+    v = (4.7*mu ** (1 / 3))*(k*t1**(3/4)*(t2-t3n/t3d))**(2/3)/(t4)
+    w = mu*v**2
+    FOM = w**-1
+    return FOM
 def compare_ToutfixedQfixed_ShearThinning(data, T_out_fixed, T_max, Q_out_fixed, S_t,
-                            L_t, D_t, D_h, A_c, A_s, visctype, visctype_var, save_loc, option_flow_type):
+                                          L_t, D_t, D_h, A_c, A_s, visctype, visctype_var, save_loc, option_flow_type):
     """
     This computes FOM by fixing T_out (essentially limited by the air temp and then solving for everything else.
     :param Q_fixed:
@@ -341,13 +382,39 @@ def compare_ToutfixedQfixed_ShearThinning(data, T_out_fixed, T_max, Q_out_fixed,
     Prandtl = np.divide(np.multiply(data['c_nf'], data['mu_nf']), data['k_nf'])
 
     mu_ratio = 1
-    if option_flow_type == "Laminar":
-        data['Velocity'] = (Q_out_fixed / (A_s * (T_max - T_out_fixed)) * (
-                .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(
-            np.multiply((np.divide(np.multiply(data['c_nf'], data['mu_nf']), data['k_nf'])) ** .4,
-                        (np.divide(data['rho_nf'], data['mu_nf']) * D_h) ** .6),
-            data['k_nf']) / D_h) ** -1) ** (5 / 3)
 
+    if option_flow_type == "Laminar":
+
+        if 1 == 1:
+            e_csnt = (Q_out_fixed / (A_s * (T_max - T_out_fixed)) * (
+                    .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(
+                np.multiply((np.divide(np.multiply(data['c_nf'], 1), data['k_nf'])) ** .4,
+                            (np.divide(data['rho_nf'], 1) * D_h) ** .6),
+                data['k_nf']) / D_h) ** -1) ** (5 / 3)  # v = e_csnt/ mu**f_csnt
+
+            f_csnt = 1 / 3.
+            data['Velocity1'] = (Q_out_fixed / (A_s * (T_max - T_out_fixed)) * (
+                    .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(
+                np.multiply((np.divide(np.multiply(data['c_nf'], data['mu_nf']), data['k_nf'])) ** .4,
+                            (np.divide(data['rho_nf'], data['mu_nf']) * D_h) ** .6),
+                data['k_nf']) / D_h) ** -1) ** (5 / 3)
+
+            data['Velocity'] = data['psi_c']
+            for fff in range(data['k_nf'].size):
+                mu0 = data['mu_nf'][fff]
+                if data['phi'][fff] == 0:
+
+                    blah = np.asarray([mu0, 0.48225293, -0.79245139, mu0, e_csnt[fff], f_csnt])
+                else:
+                    blah = np.asarray([mu0, 0.48225293, -0.79245139, mu0 * .1, e_csnt[fff], f_csnt])
+
+                root0 = fsolve(func_v_mu, [50, mu0], args=blah)
+                data['Velocity'][fff] = root0[0]
+                data['mu_nf'][fff] = root0[1]
+
+                # data['Velocity1'][fff],data['Velocity'][fff],e_csnt[fff]*mu0**(5/3.)
+
+        Prandtl = np.divide(np.multiply(data['c_nf'], data['mu_nf']), data['k_nf'])
         Reynolds = np.divide(data['rho_nf'], data['mu_nf']) * data['Velocity'] * D_h
 
         data['HTC'] = .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(np.multiply(Prandtl ** .4, Reynolds ** .6),
@@ -370,6 +437,7 @@ def compare_ToutfixedQfixed_ShearThinning(data, T_out_fixed, T_max, Q_out_fixed,
             np.multiply((np.divide(np.multiply(data['c_nf'], data['mu_nf']), data['k_nf'])) ** .4,
                         (np.divide(data['rho_nf'], data['mu_nf']) * D_h) ** .6),
             data['k_nf']) / D_h) ** -1) ** (5 / 3)
+
         Reynolds_lam = np.multiply(np.divide(data['rho_nf'], data['mu_nf']), v_lam) * D_h
         htc_lam = .128 * mu_ratio ** .14 * data['psi_c'] * np.multiply(np.multiply(Prandtl ** .4, Reynolds_lam ** .6),
                                                                        data['k_nf']) / D_h
@@ -417,6 +485,18 @@ def compare_ToutfixedQfixed_ShearThinning(data, T_out_fixed, T_max, Q_out_fixed,
     data['FOM Mouromtseff'] = data['rho_nf'] ** .8 * data['c_nf'] ** .33 * data['k_nf'] ** .67 / data['mu_nf'] ** .47
     data['FOM k/mu enhancement'] = np.divide(np.divide(data['k_nf'], data['k_f']),
                                              np.divide(data['mu_nf'], data['mu_f']))
+
+    mixedConvection_vec = np.vectorize(mixedConvection)
+    data["heatflux"] = Q_out_fixed / A_c
+    data['d_h'] = D_h
+    data['FOM Mixed Vertical Plate'] = mixedConvection_vec(c=data['c_nf'],
+                                                           k=data['k_nf'],
+                                                           mu=data['mu_nf'],
+                                                           rho=data['rho_nf'],
+                                                           deltaTwall2bulk=data['c_nf'],
+                                                           heatflux=data['heatflux'],
+                                                           d_h=data['d_h'])
+
     data['T_outcheck'] = T_max - data['Q_out'] / (A_s * data['HTC'])
     data['Shear Rate'] = 8 * np.divide(data['Velocity'], D_h)
 
@@ -505,7 +585,7 @@ st.sidebar.title('Colloid Space Exploration')
 password = st.sidebar.text_input("Password:", value="")
 password = 'notarealpwd'
 
-if password=='notarealpwd':
+if password == 'notarealpwd':
     # Create a text element and let the reader know the data is loading.
     data_load_state = st.text('Loading data...')
     # Load 10,000 rows of data into the dataframe.
@@ -660,12 +740,15 @@ if password == 'notarealpwd':
 
     """
     A variety of models are available to predict the thermophysical properties of nanofluids. The key properties to 
-    consider are viscosity, thermal conducvity, specific heat capacity, and density. The latter two are straightforward. 
+    consider are viscosity, thermal conducvity, specific heat capacity, and density. The latter two are 
+    straightforward. 
     Viscosity and thermal conductivity have a variety of model expressions reflecting various physical mechanisms and 
     empirical measurements. You can pick different models and see how various input parameters affect the properties as 
-    well as the final Figure of Merit. For a reasonable range of input values, see (1) and (2). The FOM can be calcualted 
+    well as the final Figure of Merit. For a reasonable range of input values, see (1) and (2). The FOM can be 
+    calcualted 
     in 
-    various ways depending on the users particular optimization goals. We have collected a few FOMs including a standard 
+    various ways depending on the users particular optimization goals. We have collected a few FOMs including a 
+    standard 
     one for minimizing pumping power in laminar or turbulent flows. 
 
 
@@ -695,7 +778,8 @@ if password == 'notarealpwd':
     "relevant value, and the outlet temperature is fixed, as might be expected in a typical system design where the " \
     "ambient or chiller temps are dictated by other system considerations. Temperature is unconstrained because it " \
     "matters less than we think and it is relatively easy to achieve acceptable values in an axial flow geometry. " \
-    "Acceptable solutions are those that achieve temperature change less than 4 degrees, and better solutions simply have " \
+    "Acceptable solutions are those that achieve temperature change less than 4 degrees, and better solutions simply " \
+    "have " \
     "" \
     "" \
     "a lower pumping power. The analytical form for the FOM simplifies to a simple proportionality when dividing out " \
@@ -708,20 +792,22 @@ if password == 'notarealpwd':
 
     st.latex(r' \propto  \left[ \frac{c^{\frac{4}{3}} \rho^2 k^2}{\mu^{\frac{5}{3}}} \right]')
 
-    "The literature includes several figures of merit like Mouromtseff's number or the ratio of conductivity to viscosity " \
+    "The literature includes several figures of merit like Mouromtseff's number or the ratio of conductivity to " \
+    "viscosity " \
     "" \
     "enhancement."
     st.latex(r'''M_{0} = \frac{\rho^{.8} k^{.67} c^{.33}}{\mu^{.47}}''')
     st.latex(r'''\frac{C_{k} }{C_{\mu}}>4''')
 
-    "You can create a user specified figure of merit by changing the exponents on the thermophysical parameters in the sidebar."
+    "You can create a user specified figure of merit by changing the exponents on the thermophysical parameters in " \
+    "the sidebar."
 
     st.sidebar.text(inspect.getsource(getattr(a, option_visc)))
 
     option_cond = st.sidebar.selectbox('Conductivity Model', ["EMT-Nan"])
 
     st.sidebar.subheader('Figure of Merit')
-    object_methods_FOM = ['FOM Standard', 'FOM User', 'FOM Mouromtseff', 'FOM k/mu enhancement']
+    object_methods_FOM = ['FOM Standard', 'FOM User', 'FOM Mouromtseff', 'FOM k/mu enhancement','FOM Mixed Vertical Plate']
     option_FOM = st.sidebar.selectbox('Pick a FOM to compare colloids by.', object_methods_FOM, 0)
     option_FOM_norm = st.sidebar.checkbox('Normalize to first basefluid', True)
 
@@ -744,7 +830,8 @@ if password == 'notarealpwd':
     FOM_strings = {'FOM Standard': r'FOM \propto  \left[ \frac{c^{\frac{4}{3}} \rho^2 k^2}{\mu^{\frac{5}{3}}} \right]',
                    'FOM User': string_toshowFOMuser,
                    'FOM Mouromtseff': r'''FOM = M_{0} = \frac{\rho^{.8} k^{.67} c^{.33}}{\mu^{.47}}''',
-                   'FOM k/mu enhancement': r'''FOM = \frac{C_{k} }{C_{\mu}}>4'''}
+                   'FOM k/mu enhancement': r'''FOM = \frac{C_{k} }{C_{\mu}}>4''',
+                   'FOM Mixed Vertical Plate': r'''FOM = \frac{\left(21.8 \mu^{5 / 3}\right)\left(k\left(0.075\left(\frac{k}{c \mu}\right)^{2 / 3}+1\right)^{3 / 4}\left(\frac{D_{h}{ }^{3} \mathrm{~h}^{3}}{k^{3}}-\frac{0.18 g^{3 / 4}\left(\frac{c \mu}{k}\right)^{3 / 4}}{\left(0.63\left(\frac{k}{c \mu}\right)^{9 / 16}+1\right)^{4 / 3}}\right)\right)^{4 / 3}}{\rho^{2} D_{h}^{2} c^{4 / 3}} '''}
 
     st.sidebar.latex(r'' + FOM_strings[option_FOM])
 
@@ -784,10 +871,12 @@ if password == 'notarealpwd':
     if st.button('Press to Compute') or autocompute_toggle:
 
         data = compare_ToutfixedQfixed_ShearThinning(data=colloid_combos,
-                                       T_out_fixed=T_out_fixed, T_max=T_max,
-                                       Q_out_fixed=Q_out_fixed,
-                                       S_t=S_t, L_t=L_t, D_t=D_t, D_h=D_h, A_c=A_c, A_s=A_s, save_loc=data_loc,
-                                       visctype=option_visc, visctype_var=visc_vars, option_flow_type=option_flow_type)
+                                                     T_out_fixed=T_out_fixed, T_max=T_max,
+                                                     Q_out_fixed=Q_out_fixed,
+                                                     S_t=S_t, L_t=L_t, D_t=D_t, D_h=D_h, A_c=A_c, A_s=A_s,
+                                                     save_loc=data_loc,
+                                                     visctype=option_visc, visctype_var=visc_vars,
+                                                     option_flow_type=option_flow_type)
         st.subheader('Computed Performance')
         data = data.round({'phi': 3, 'a_33': 3, 'p': 3})
         data
@@ -927,4 +1016,3 @@ if password == 'notarealpwd':
     ' '
     ' '
     'http://accessibility.mit.edu'
-
