@@ -1,5 +1,10 @@
 import numpy as np
 
+"""
+functions for use in colloid_model.py
+
+"""
+
 def density_nf(phi, rho_p, rho_f):
     """
     Simple volumetric average

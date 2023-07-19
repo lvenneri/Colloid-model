@@ -338,6 +338,7 @@ def compare_ToutfixedQfixed(data, T_out_fixed, T_max, Q_out_fixed, S_t,
     return data
 
 def mixedConvection(c,k,mu,rho,deltaTwall2bulk, heatflux,d_h,):
+    """ FOM for mixed convection."""
     h = heatflux/deltaTwall2bulk
     t1 = 0.075*((k) / (c * mu)) ** (2 / 3) + 1
     t2 = (d_h ** (3) * h ** (3)) / (k ** (3))
@@ -549,6 +550,8 @@ def get_table_download_link(df, filename):
 
 
 def generate_colloids(nanoparticle_cand, basefluid_cand, par_space):
+    """ Generates the combinations for the parameter space"""
+
     parameter = []
     possible_vals = []
 
@@ -997,7 +1000,6 @@ if password == 'notarealpwd':
         summary
         st.markdown(get_table_download_link(summary, 'summary'), unsafe_allow_html=True)
 
-        # TODO add calculated LOOP crap
         # st.subheader('Lubrizol Flow Loop Parameters')
 
     st.header("References")
